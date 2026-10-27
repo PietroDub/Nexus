@@ -1,55 +1,83 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
+import { Prisma } from '../generated/prisma/client.js';
 import { CreateUserDto } from '../dto/create-user.dto.js';
-import { User } from '../models/user.model.js';
 import { UpdateUserDto } from '../dto/update-user.dto.js';
+import { User } from '../models/user.model.js';
+import { PrismaService } from '../prisma/prisma.service.js';
 
 @Injectable()
 export class UserService {
-  private readonly users: User[] = [];
+  constructor(private readonly prisma: PrismaService) {}
 
-  create(dto: CreateUserDto): User {
-    if (this.users.find((user) => user.email === dto.email)) {
-      throw new BadRequestException('Email already exists');
+  async create(dto: CreateUserDto): Promise<User> {
+    try {
+      return await this.prisma.user.create({
+        data: {
+          email: dto.email,
+          displayName: dto.displayName,
+        },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new BadRequestException('Email already exists');
+      }
+      throw error;
     }
-    
-    const now = new Date();
-    const user: User = {
-      id: randomUUID(),
-      email: dto.email,
-      displayName: dto.displayName,
-      createdAt: now,
-      updatedAt: now,
-    };
-    this.users.push(user);
-    return user;
   }
 
-  findAll(): User[] {
-    return this.users;
+  findAll(): Promise<User[]> {
+    return this.prisma.user.findMany({
+      orderBy: { createdAt: 'asc' },
+    });
   }
 
-  findOne(id: string): User | undefined {
-    return this.users.find((user) => user.id === id);
+  findOne(id: string): Promise<User | null> {
+    return this.prisma.user.findUnique({
+      where: { id },
+    });
   }
 
-  update(id: string, dto: UpdateUserDto): User | undefined {
-    const user = this.findOne(id);
-    if (!user) {
-      return undefined;
+  async update(id: string, dto: UpdateUserDto): Promise<User | null> {
+    try {
+      return await this.prisma.user.update({
+        where: { id },
+        data: {
+          email: dto.email,
+          displayName: dto.displayName,
+        },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2025'
+      ) {
+        return null;
+      }
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new BadRequestException('Email already exists');
+      }
+      throw error;
     }
-    user.email = dto.email ?? user.email;
-    user.displayName = dto.displayName ?? user.displayName;
-    user.updatedAt = new Date();
-    return user;
   }
 
-  delete(id: string): boolean {
-    const index = this.users.findIndex((user) => user.id === id);
-    if (index === -1) {
-      return false;
+  async delete(id: string): Promise<boolean> {
+    try {
+      await this.prisma.user.delete({ where: { id } });
+      return true;
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2025'
+      ) {
+        return false;
+      }
+      throw error;
     }
-    this.users.splice(index, 1);
-    return true;
   }
 }

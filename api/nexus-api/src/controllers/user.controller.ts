@@ -20,14 +20,13 @@ export class UserController {
   constructor(private readonly userService: UserService) {}
 
   @Get()
-  findAll(): User[] {
+  findAll(): Promise<User[]> {
     return this.userService.findAll();
   }
-  
 
   @Get(':id')
-  findOne(@Param('id') id: string): User {
-    const user = this.userService.findOne(id);
+  async findOne(@Param('id') id: string): Promise<User> {
+    const user = await this.userService.findOne(id);
     if (!user) {
       throw new NotFoundException(`User ${id} not found`);
     }
@@ -36,16 +35,16 @@ export class UserController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  create(@Body() dto: CreateUserDto): User {
+  create(@Body() dto: CreateUserDto): Promise<User> {
     return this.userService.create(dto);
   }
 
   @Patch(':id')
-  update(
+  async update(
     @Param('id') id: string,
     @Body() dto: UpdateUserDto,
-  ): User {
-    const user = this.userService.update(id, dto);
+  ): Promise<User> {
+    const user = await this.userService.update(id, dto);
     if (!user) {
       throw new NotFoundException(`User ${id} not found`);
     }
@@ -54,8 +53,8 @@ export class UserController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  remove(@Param('id') id: string): void {
-    const deleted = this.userService.delete(id);
+  async remove(@Param('id') id: string): Promise<void> {
+    const deleted = await this.userService.delete(id);
     if (!deleted) {
       throw new NotFoundException(`User ${id} not found`);
     }

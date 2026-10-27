@@ -1,0 +1,228 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TemplateKey {
+  knowledge
+  worldbuilding
+}
+
+enum MembershipRole {
+  owner
+  editor
+  viewer
+}
+
+model User {
+  id          String   @id @default(uuid()) @db.Uuid
+  email       String   @unique
+  displayName String   @map("display_name")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  ownedWorkspaces  Workspace[]  @relation("WorkspaceOwner")
+  memberships      Membership[]
+  createdNodes     Node[]       @relation("NodeCreatedBy")
+  createdRelations Relation[]   @relation("RelationCreatedBy")
+  createdViews     GraphView[]  @relation("GraphViewCreatedBy")
+  auditEvents      AuditEvent[]
+
+  @@map("users")
+}
+
+model Workspace {
+  id          String       @id @default(uuid()) @db.Uuid
+  name        String
+  ownerId     String       @map("owner_id") @db.Uuid
+  templateKey TemplateKey  @map("template_key")
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  archivedAt  DateTime?    @map("archived_at") @db.Timestamptz(6)
+
+  owner          User           @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  memberships    Membership[]
+  graphs         Graph[]
+  nodeTypes      NodeType[]
+  relationTypes  RelationType[]
+  auditEvents    AuditEvent[]
+
+  @@map("workspaces")
+}
+
+model Membership {
+  workspaceId String         @map("workspace_id") @db.Uuid
+  userId      String         @map("user_id") @db.Uuid
+  role        MembershipRole
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@id([workspaceId, userId])
+  @@index([userId])
+  @@map("memberships")
+}
+
+model Graph {
+  id            String   @id @default(uuid()) @db.Uuid
+  workspaceId   String   @map("workspace_id") @db.Uuid
+  name          String
+  schemaVersion Int      @default(1) @map("schema_version")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace  Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  nodes      Node[]
+  relations  Relation[]
+  views      GraphView[]
+
+  @@index([workspaceId])
+  @@map("graphs")
+}
+
+model NodeType {
+  id               String   @id @default(uuid()) @db.Uuid
+  workspaceId      String   @map("workspace_id") @db.Uuid
+  key              String
+  label            String
+  description      String   @default("")
+  attributeSchema  Json     @default("{}") @map("attribute_schema")
+  style            Json     @default("{}")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  nodes     Node[]
+
+  @@unique([workspaceId, key])
+  @@map("node_types")
+}
+
+model RelationType {
+  id               String   @id @default(uuid()) @db.Uuid
+  workspaceId      String   @map("workspace_id") @db.Uuid
+  key              String
+  label            String
+  inverseLabel     String?  @map("inverse_label")
+  directedDefault  Boolean  @default(true) @map("directed_default")
+  acyclic          Boolean  @default(false)
+  propertySchema   Json     @default("{}") @map("property_schema")
+  style            Json     @default("{}")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  relations Relation[]
+
+  @@unique([workspaceId, key])
+  @@map("relation_types")
+}
+
+model Node {
+  id         String    @id @default(uuid()) @db.Uuid
+  graphId    String    @map("graph_id") @db.Uuid
+  typeId     String    @map("type_id") @db.Uuid
+  title      String
+  content    String    @default("")
+  attributes Json      @default("{}")
+  createdBy  String    @map("created_by") @db.Uuid
+  version    Int       @default(1)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(6)
+
+  graph          Graph             @relation(fields: [graphId], references: [id], onDelete: Cascade)
+  type           NodeType          @relation(fields: [typeId], references: [id], onDelete: Restrict)
+  creator        User              @relation("NodeCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+  outgoing       Relation[]        @relation("RelationSource")
+  incoming       Relation[]        @relation("RelationTarget")
+  layouts        GraphViewLayout[]
+
+  @@index([graphId, typeId])
+  @@index([graphId, title])
+  @@map("nodes")
+}
+
+model Relation {
+  id           String    @id @default(uuid()) @db.Uuid
+  graphId      String    @map("graph_id") @db.Uuid
+  typeId       String    @map("type_id") @db.Uuid
+  sourceNodeId String    @map("source_node_id") @db.Uuid
+  targetNodeId String    @map("target_node_id") @db.Uuid
+  directed     Boolean
+  properties   Json      @default("{}")
+  createdBy    String    @map("created_by") @db.Uuid
+  version      Int       @default(1)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  archivedAt   DateTime? @map("archived_at") @db.Timestamptz(6)
+
+  graph  Graph        @relation(fields: [graphId], references: [id], onDelete: Cascade)
+  type   RelationType @relation(fields: [typeId], references: [id], onDelete: Restrict)
+  source Node         @relation("RelationSource", fields: [sourceNodeId], references: [id], onDelete: Restrict)
+  target Node         @relation("RelationTarget", fields: [targetNodeId], references: [id], onDelete: Restrict)
+  creator User        @relation("RelationCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+
+  @@index([graphId, typeId])
+  @@index([sourceNodeId])
+  @@index([targetNodeId])
+  @@map("relations")
+}
+
+model GraphView {
+  id        String   @id @default(uuid()) @db.Uuid
+  graphId   String   @map("graph_id") @db.Uuid
+  name      String
+  isDefault Boolean  @default(false) @map("is_default")
+  viewport  Json     @default("{\"x\":0,\"y\":0,\"zoom\":1}")
+  filters   Json     @default("{}")
+  createdBy String   @map("created_by") @db.Uuid
+  version   Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  graph   Graph             @relation(fields: [graphId], references: [id], onDelete: Cascade)
+  creator User              @relation("GraphViewCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+  layouts GraphViewLayout[]
+
+  @@index([graphId])
+  @@map("graph_views")
+}
+
+model GraphViewLayout {
+  viewId String @map("view_id") @db.Uuid
+  nodeId String @map("node_id") @db.Uuid
+  x      Float  @db.DoublePrecision
+  y      Float  @db.DoublePrecision
+
+  view GraphView @relation(fields: [viewId], references: [id], onDelete: Cascade)
+  node Node      @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+
+  @@id([viewId, nodeId])
+  @@index([nodeId])
+  @@map("graph_view_layouts")
+}
+
+model AuditEvent {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  actorId     String?  @map("actor_id") @db.Uuid
+  entityType  String   @map("entity_type")
+  entityId    String   @map("entity_id") @db.Uuid
+  action      String
+  payload     Json     @default("{}")
+  requestId   String   @map("request_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  actor     User?     @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([entityId])
+  @@map("audit_events")
+}
