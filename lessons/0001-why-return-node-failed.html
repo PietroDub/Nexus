@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Por que o return de Node falhou</title>
+  <link rel="stylesheet" href="../assets/lesson.css" />
+</head>
+<body>
+<main>
+  <header>
+    <p>Lição 1 · Nexus API</p>
+    <h1>Por que o return não type-checkava — passo a passo</h1>
+  </header>
+
+  <p>Já localizaste o sítio: a anotação <code>Promise&lt;Node[]&gt;</code>. Esta lição não salta daí para “é o JSON”. Cada passo é o que o compilador faz a seguir.</p>
+
+  <ol class="steps">
+    <li>
+      <strong>O método faz uma query.</strong>
+      <pre>findAll(): Promise&lt;Node[]&gt; {
+  return this.prisma.node.findMany();
+}</pre>
+      Em runtime isto funciona: o Prisma vai ao Postgres e devolve linhas. O erro é só de tipos, em tempo de compilação.
+    </li>
+    <li>
+      <strong>A anotação é um contrato, não um rótulo.</strong>
+      Escrever <code>: Promise&lt;Node[]&gt;</code> significa: “o que esta função devolve <em>tem de ser atribuível</em> a um array da <em>minha</em> classe <code>Node</code>.” O TypeScript vai verificar isso. Não traduz o nome <code>Node</code> para “o modelo Prisma Node”.
+    </li>
+    <li>
+      <strong>Existem dois tipos diferentes que tu chamaste Node.</strong>
+      Um é <code>api/nexus-api/src/models/node.model.ts</code> — a classe que importaste. O outro é o tipo gerado em <code>src/generated/prisma</code>, que descreve a linha da tabela <code>nodes</code>. Partilham o <em>nome</em> na tua cabeça. No compilador são dois contratos separados.
+    </li>
+    <li>
+      <strong>TypeScript é estrutural: ignora o nome, lê os membros.</strong>
+      A regra oficial: um valor é compatível com um tipo se tiver <em>pelo menos</em> os mesmos membros, cada um compatível.
+      <aside>Handbook: “x is compatible with y if y has at least the same members as x.” <a href="https://www.typescriptlang.org/docs/handbook/type-compatibility.html">Type Compatibility</a>.</aside>
+    </li>
+    <li>
+      <strong>Ele compara campo a campo com a tua classe como alvo.</strong>
+      Alvo = o que prometeste (<code>Node</code> da model). Fonte = o que o Prisma devolve. Para cada propriedade do alvo, tem de haver uma propriedade compatível na fonte.
+    </li>
+    <li>
+      <strong>User passa neste teste. Por isso o UserService não vermelhou.</strong>
+      <table>
+        <thead><tr><th>Campo</th><th>Tua classe User</th><th>Prisma User</th><th></th></tr></thead>
+        <tbody>
+          <tr><td><code>id</code></td><td><code>string</code></td><td><code>string</code></td><td class="ok">ok</td></tr>
+          <tr><td><code>email</code></td><td><code>string</code></td><td><code>string</code></td><td class="ok">ok</td></tr>
+          <tr><td><code>displayName</code></td><td><code>string</code></td><td><code>string</code></td><td class="ok">ok</td></tr>
+          <tr><td><code>createdAt</code></td><td><code>Date</code></td><td><code>Date</code></td><td class="ok">ok</td></tr>
+        </tbody>
+      </table>
+      Todos os membros do alvo existem na fonte com o mesmo tipo. Atribuição permitida. <code>findMany</code> de User encaixa em <code>Promise&lt;User[]&gt;</code>.
+    </li>
+    <li>
+      <strong>Node começa igual — até <code>attributes</code>.</strong>
+      <table>
+        <thead><tr><th>Campo</th><th>Tua classe (antes)</th><th>Prisma Node</th><th></th></tr></thead>
+        <tbody>
+          <tr><td><code>id</code></td><td><code>string</code></td><td><code>string</code></td><td class="ok">ok</td></tr>
+          <tr><td><code>title</code></td><td><code>string</code></td><td><code>string</code></td><td class="ok">ok</td></tr>
+          <tr><td><code>content</code></td><td><code>string</code></td><td><code>string</code></td><td class="ok">ok</td></tr>
+          <tr><td><code>attributes</code></td><td><code>Record&lt;string, unknown&gt;</code></td><td><code>JsonValue</code></td><td class="bad">falha</td></tr>
+        </tbody>
+      </table>
+      Um membro incompatível anula o objeto inteiro. Não há “quase Node”.
+    </li>
+    <li>
+      <strong>O que cada tipo de <code>attributes</code> aceita.</strong>
+      <code>Record&lt;string, unknown&gt;</code> é um <em>objeto</em> cujas chaves são string. Oficialmente: “object type whose property keys are Keys and whose property values are Type.” <a href="https://www.typescriptlang.org/docs/handbook/utility-types.html#recordkeys-type">Record</a>.
+      Valores legais: <code>{ "level": 1 }</code>. Ilegais: <code>null</code>, <code>[1,2]</code>, <code>"texto"</code>, <code>true</code>.
+    </li>
+    <li>
+      <strong>O Prisma modela JSON de verdade.</strong>
+      Campo <code>Json</code> no schema vira <code>JsonValue</code>:
+      <pre>string | number | boolean | null | JsonObject | JsonArray</pre>
+      Isto existe para coincidir com o que <code>JSON.parse</code> pode devolver. <a href="https://www.prisma.io/docs/orm/prisma-client/special-fields-and-types/working-with-json-fields">Prisma Json fields</a>.
+      <code>null</code> é um <code>JsonValue</code>. <code>null</code> <em>não</em> é um <code>Record</code>. Portanto <code>JsonValue</code> não é atribuível a <code>Record&lt;string, unknown&gt;</code> — mesmo que tu só graves objetos.
+    </li>
+    <li>
+      <strong>Por que o erro fala de <code>then</code> e <code>onfulfilled</code>.</strong>
+      <code>findMany</code> devolve <code>PrismaPromise&lt;Linha[]&gt;</code>, que é um <code>Promise</code>. Para um Promise ser atribuível a outro, o <em>valor resolvido</em> tem de ser atribuível. O compilador desce a <code>then</code>, depois ao callback, depois a <code>value</code>. Lá, <code>Linha[]</code> vs <code>Node[]</code> falha no passo 7. A pilha enorme é só o Promise a empacotar o mesmo problema de <code>attributes</code>.
+    </li>
+    <li>
+      <strong>A correção do tipo: o alvo passou a falar a língua da fonte.</strong>
+      Na model:
+      <pre>attributes: Prisma.JsonValue;</pre>
+      Agora o alvo aceita o mesmo conjunto que o Prisma devolve. Campo a campo, a comparação fecha. <code>return this.prisma.node.findMany()</code> passa a ser atribuível a <code>Promise&lt;Node[]&gt;</code>.
+      Não usámos <code>as Node[]</code>: isso calava o erro mentindo. Alinhámos o contrato.
+    </li>
+    <li>
+      <strong>Duas correções vizinhas — não são o erro do return, mas estavam no mesmo ficheiro.</strong>
+      O schema não tem <code>description</code>; o campo é <code>content</code>. E <code>JSON.stringify(dto.attributes)</code> transformava o objeto numa string; o Prisma já serializa objetos para Json. <a href="https://www.prisma.io/docs/orm/prisma-client/special-fields-and-types/working-with-json-fields#writing-to-a-json-field">Writing to a Json field</a>. Isso quebraria o <em>create</em>, não o tipo do <code>findAll</code>.
+    </li>
+  </ol>
+
+  <h2>Pratica</h2>
+  <p>Sem reler a tabela: qual membro falhou, e o que o alinhamento fez.</p>
+  <div class="quiz" data-quiz='[{"q":"O TypeScript trata os dois Node como o mesmo tipo por causa do nome?","choices":["Sim: o nome Node basta para os tipos coincidirem.","Não: ele compara campos e ignora nome deste Node."],"answer":1,"ok":"Certo. Compatibilidade é estrutural, não nominal.","no":"O handbook compara membros, não nomes de classe."},{"q":"Qual membro impediu Promise<Node[]> de aceitar o findMany?","choices":["title string Prisma gerada ainda não é string.","attributes JsonValue amplo ainda não cabe em Record.","ident uuid do banco ainda não é string."],"answer":1,"ok":"Certo. Só attributes era mais largo que o alvo.","no":"id e title já batiam; o furo era attributes."},{"q":"Por que alinhar attributes com Prisma.JsonValue arruma o return?","choices":["O alvo passa a aceitar o JSON que a fonte devolve.","O Prisma deixa de ir ao banco e devolve tua classe.","O then do Promise some agora do tipo gerado no Prisma."],"answer":0,"ok":"Certo. O contrato do alvo ficou igual ao payload.","no":"findMany continua igual; mudou só o tipo do alvo."}]'></div>
+
+  <footer>
+    <p>Fonte primária para rever: <a href="https://www.typescriptlang.org/docs/handbook/type-compatibility.html">TypeScript — Type Compatibility</a>. Folha rápida: <a href="../reference/structural-assignability.html">compatibilidade estrutural</a>.</p>
+    <p>Dúvida num passo? Pergunta no chat — este agente é o professor desta sequência.</p>
+  </footer>
+</main>
+<script src="../assets/quiz.js"></script>
+</body>
+</html>

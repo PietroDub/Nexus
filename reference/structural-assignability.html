@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Referência — compatibilidade estrutural</title>
+  <link rel="stylesheet" href="../assets/lesson.css" />
+</head>
+<body>
+<main>
+  <header>
+    <p>Referência</p>
+    <h1>Compatibilidade estrutural</h1>
+  </header>
+
+  <p>TypeScript compara tipos pelos membros, não pelo nome. Fonte: <a href="https://www.typescriptlang.org/docs/handbook/type-compatibility.html">Type Compatibility</a>.</p>
+
+  <h2>Regra</h2>
+  <p><code>x</code> é atribuível a <code>y</code> se <code>x</code> tiver <em>pelo menos</em> os membros de <code>y</code>, cada um compatível. Extra em <code>x</code> é irrelevante. Falta ou tipo mais largo num membro obrigatório de <code>y</code> é erro.</p>
+
+  <h2>Record vs JsonValue</h2>
+  <table>
+    <thead>
+      <tr><th>Tipo</th><th>O que cabe</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>Record&lt;string, unknown&gt;</code></td>
+        <td>Só objeto com chaves string. Não: <code>null</code>, array, number. <a href="https://www.typescriptlang.org/docs/handbook/utility-types.html#recordkeys-type">Record</a>.</td>
+      </tr>
+      <tr>
+        <td><code>Prisma.JsonValue</code></td>
+        <td><code>string | number | boolean | null | JsonObject | JsonArray</code>. <a href="https://www.prisma.io/docs/orm/prisma-client/special-fields-and-types/working-with-json-fields">Prisma Json</a>.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Anotação de retorno</h2>
+  <p><code>findAll(): Promise&lt;A[]&gt;</code> exige que o valor resolvido seja atribuível a <code>A[]</code>. O TypeScript compara o payload do Prisma com <code>A</code> campo a campo. Um campo incompatível derruba o <code>Promise</code> inteiro (o erro menciona <code>then</code>).</p>
+
+  <h2>Correção no Nexus</h2>
+  <p>Alinhar <code>Node.attributes</code> com <code>Prisma.JsonValue</code>. Não usar <code>as Node[]</code>. Não fazer <code>JSON.stringify</code> ao gravar Json — o Prisma aceita o objeto.</p>
+</main>
+</body>
+</html>
