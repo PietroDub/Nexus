@@ -2,15 +2,17 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
+import { GraphController } from './controllers/graph.controller.js';
 import { NodeController } from './controllers/node.controller.js';
+import { RelationController } from './controllers/relation.controller.js';
 import { UserController } from './controllers/user.controller.js';
 import { WorkspaceController } from './controllers/workspace.controller.js';
 import { PrismaModule } from './prisma/prisma.module.js';
+import { GraphService } from './services/graph.service.js';
 import { NodeService } from './services/node.service.js';
+import { RelationService } from './services/relation.service.js';
 import { UserService } from './services/user.service.js';
 import { WorkspaceService } from './services/workspace.service.js';
-import { RelationController } from './controllers/relation.controller.js';
-import { RelationService } from './services/relation.service.js';
 
 @Module({
   imports: [
@@ -23,7 +25,15 @@ import { RelationService } from './services/relation.service.js';
     WorkspaceController,
     NodeController,
     RelationController,
+    GraphController,
   ],
-  providers: [AppService, UserService, WorkspaceService, NodeService, RelationService],
+  providers: [
+    AppService,
+    UserService,
+    WorkspaceService,
+    NodeService,
+    RelationService,
+    GraphService,
+  ],
 })
 export class AppModule {}
