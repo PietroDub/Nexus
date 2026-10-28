@@ -12,6 +12,16 @@
   Documents `JsonValue = string | number | boolean | null | JsonObject | JsonArray`. Use for: why Prisma `attributes` is wider than a Record.
 - [Prisma: Writing to a Json field](https://www.prisma.io/docs/orm/prisma-client/special-fields-and-types/working-with-json-fields#writing-to-a-json-field)
   JavaScript objects are converted to JSON; do not `JSON.stringify` first. Use for: the create/update payload.
+- [Prisma v6: Relation queries — nested writes](https://www.prisma.io/docs/v6/orm/prisma-client/queries/relation-queries#nested-writes)
+  Parent `create` with nested `create` is one transaction. Use for: why `POST /workspaces` already inserts graph + default view. (v6 docs match the Prisma 7 client API in this repo; current prisma.io frontpage is Prisma 8.)
+- [Prisma v6: upsert](https://www.prisma.io/docs/v6/orm/prisma-client/queries/crud#update-or-create-records)
+  `where` (unique) + `update` + `create`. Use for: `PUT` of `graph_view_layouts` on `(viewId, nodeId)`.
+- [NestJS: Controllers](https://docs.nestjs.com/controllers)
+  `@Controller` prefix, `@Get(':id')`, `@Query`, `@Patch`. Use for: Graph/View route shape.
+- [Nexus data-model: graphs / views / layouts](docs/data-model.md)
+  Product rules: one graph per workspace in MVP, one default view, layout off the node, no x/y on nodes.
+- [ADR 0001](docs/adr/0001-normalized-postgres-graph.md)
+  Positions live on the view, not the node.
 
 ## Wisdom (Communities)
 

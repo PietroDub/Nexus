@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Graph, View e Layout desde a base</title>
+  <link rel="stylesheet" href="../assets/lesson.css" />
+</head>
+<body>
+<main>
+  <header>
+    <p>Lição 3 · desde a base</p>
+    <h1>Três tabelas, uma cadeia — não três Users</h1>
+  </header>
+
+  <p>As <a href="./0001-why-return-node-failed.html">lições 1–2</a> eram sobre tipos. Esta é sobre <em>quem é pai de quem</em> no Nexus, para implementares View sem inventar um <code>POST /graphs</code>.</p>
+
+  <ol class="steps">
+    <li>
+      <strong>Três trabalhos, três nomes.</strong>
+      No <a href="../GLOSSARY.md">GLOSSARY</a>:
+      <ul>
+        <li><strong>Graph</strong> — o conjunto de nodes e relations. É o conhecimento. Não é o desenho.</li>
+        <li><strong>View</strong> — recorte visual: nome, viewport, filtros, “esta é a default?”. Não muda o significado dos nodes.</li>
+        <li><strong>Layout</strong> — um par <code>(x, y)</code> de <em>um</em> node <em>numa</em> view. A palavra “layout” no glossário é mesmo a geometria, não a View.</li>
+      </ul>
+      Se metesses <code>x,y</code> no Node, arrastar o canvas versionaria o conhecimento. O <a href="../docs/adr/0001-normalized-postgres-graph.md">ADR 0001</a> recusa isso.
+    </li>
+    <li>
+      <strong>Relação no banco = chave estrangeira, não “três CRUDs iguais”.</strong>
+      Uma linha filha guarda o <code>id</code> do pai. Muitas filhas podem apontar para o mesmo pai. Isso chama-se <em>um-para-muitos</em>.
+      <aside>Prisma: o filho guarda o id do pai; o pai declara uma lista. <a href="https://www.prisma.io/docs/v6/orm/prisma-client/queries/relation-queries">Relation queries (v6, API do teu Prisma 7)</a>.</aside>
+      No teu schema:
+      <pre>graphs.workspace_id     → workspaces.id
+graph_views.graph_id    → graphs.id
+graph_view_layouts.view_id → graph_views.id
+graph_view_layouts.node_id → nodes.id</pre>
+      Layout tem <em>dois</em> pais: a view (onde está desenhado) e o node (o que está desenhado).
+    </li>
+    <li>
+      <strong>A árvore, desenhada.</strong>
+      <pre>Workspace
+  └── Graph              ← conhecimento vive aqui
+        ├── Node[]
+        ├── Relation[]
+        └── GraphView[]  ← apresentação
+              └── GraphViewLayout[]   (viewId + nodeId + x + y)</pre>
+      User é uma linha solta. Graph não. Graph <em>pertence</em> a um workspace. View <em>pertence</em> a um graph. Layout <em>pertence</em> a uma view <em>e</em> a um node.
+    </li>
+    <li>
+      <strong>Nested write: o pai cria o filho no mesmo INSERT.</strong>
+      Prisma deixa-te, num único <code>create</code>, escrever o pai e os filhos. Se qualquer parte falhar, <em>nada</em> fica gravado (transação).
+      <aside>“A nested write allows you to write relational data to your database in a single transaction.” <a href="https://www.prisma.io/docs/v6/orm/prisma-client/queries/relation-queries#nested-writes">Nested writes</a>.</aside>
+      É exatamente o que o <code>WorkspaceService.create</code> já faz:
+      <pre>workspaces.create({
+  graphs: {
+    create: {
+      name: dto.name,
+      views: {
+        create: {
+          name: "Default",
+          isDefault: true,
+          createdBy: dto.ownerId,
+        },
+      },
+    },
+  },
+})</pre>
+      Um <code>POST /workspaces</code> já abre: 1 workspace, 1 graph, 1 view Default. <strong>Zero</strong> layouts. Layouts precisam de um node, e ainda não há nodes.
+    </li>
+    <li>
+      <strong>O que existe no banco depois desse POST.</strong>
+      <table>
+        <thead>
+          <tr><th>Tabela</th><th>Linhas</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>workspaces</code></td><td>1</td></tr>
+          <tr><td><code>graphs</code></td><td>1 (nome = nome do workspace)</td></tr>
+          <tr><td><code>graph_views</code></td><td>1 (<code>Default</code>, <code>isDefault: true</code>, viewport <code>{x:0,y:0,zoom:1}</code>)</td></tr>
+          <tr><td><code>graph_view_layouts</code></td><td>0</td></tr>
+          <tr><td><code>nodes</code> / <code>relations</code></td><td>0 (vocabulário de tipos já está copiado)</td></tr>
+        </tbody>
+      </table>
+      Por isso não há <code>POST /graphs</code>: a linha já nasceu. Implementámos só leitura e rename.
+    </li>
+    <li>
+      <strong>Contrato HTTP do Graph — já feito.</strong>
+      Nest agrupa rotas com um prefixo no <code>@Controller</code>. <code>@Get(':id')</code> captura o id do URL. <code>@Query</code> lê a query string. <code>@Patch</code> é atualização parcial.
+      <aside><a href="https://docs.nestjs.com/controllers">Nest controllers</a>: prefixo, <code>@Get(':id')</code>, <code>@Query</code>, <code>@Patch</code>.</aside>
+      <table>
+        <thead>
+          <tr><th>Rota</th><th>Faz</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>GET /graphs?workspaceId=</code></td><td>Lista (MVP: 0 ou 1). Ignora workspace arquivado.</td></tr>
+          <tr><td><code>GET /graphs/:id</code></td><td>A linha do graph. <em>Sem</em> nodes, <em>sem</em> x,y.</td></tr>
+          <tr><td><code>PATCH /graphs/:id</code></td><td><code>{ name? }</code>. Não mexe em <code>schemaVersion</code>.</td></tr>
+        </tbody>
+      </table>
+      <code>GET /workspaces/:id</code> já traz <code>graphs[].views</code> no detalhe — é o include aninhado, não um segundo create.
+    </li>
+    <li>
+      <strong>View — a primeira linha já existe; o CRUD ainda não.</strong>
+      Depois do workspace, podes <em>abrir</em> a Default (se souberes o id pelo detalhe do workspace). Não podes ainda:
+      <ul>
+        <li>listar views por <code>graphId</code></li>
+        <li>criar uma segunda view</li>
+        <li>mudar viewport / filters / nome / default</li>
+        <li>apagar uma view extra</li>
+      </ul>
+      Contratos a implementar, no mesmo estilo do Graph (recurso plano <code>/views</code>):
+      <pre>GET    /views?graphId=
+GET    /views/:id
+POST   /views          { graphId, name, createdBy }
+PATCH  /views/:id      { name?, viewport?, filters?, isDefault? }
+DELETE /views/:id</pre>
+      Regras que o User não tem:
+      <ul>
+        <li>Um default por graph. Promover uma view, na mesma transação, desmarca as outras.</li>
+        <li>Não apagar a última view. Não ficar sem default.</li>
+        <li>View não tem <code>archivedAt</code>: DELETE é hard delete; layouts caem por CASCADE. Nodes ficam.</li>
+        <li><code>version</code> da view sobe no PATCH de metadados. Audit <code>ViewUpdated</code> aqui — não no drag.</li>
+      </ul>
+      O <code>assert</code> da View é só “este <code>graphId</code> existe e o workspace não está arquivado”. Não copies o <code>assertPlacement</code> da Relation.
+    </li>
+    <li>
+      <strong>Layout — não é um recurso REST com <code>id</code>.</strong>
+      A identidade é a PK composta <code>(viewId, nodeId)</code>. Um node na view A tem um <code>(x,y)</code>; na view B pode ter outro; ou nenhum (ainda não abriste essa view).
+      <p>O canvas não faz <code>POST</code> + <code>PATCH</code> linha a linha. Faz <em>upsert</em>: “se esta chave existe, atualiza x,y; senão, cria.”</p>
+      <aside>Prisma <code>upsert</code>: <code>where</code> (único), <code>update</code>, <code>create</code>. <a href="https://www.prisma.io/docs/v6/orm/prisma-client/queries/crud#update-or-create-records">Update or create records</a>.</aside>
+      Contrato único:
+      <pre>PUT /views/:viewId/layouts
+[{ "nodeId": "...", "x": 12.5, "y": 40 }]</pre>
+      Vive no <em>mesmo</em> <code>GraphViewService</code>, não num <code>GraphViewLayoutService</code> tipo User. O <code>assert</code>: cada node existe, não está arquivado, e <code>node.graphId === view.graphId</code>. A FK sozinha não garante o mesmo graph.
+    </li>
+    <li>
+      <strong>Fluxo humano, passo a passo, com o que já corre.</strong>
+      <ol>
+        <li><code>POST /workspaces</code> → nasceram graph + view Default. Layouts = 0.</li>
+        <li><code>GET /graphs?workspaceId=</code> ou o detalhe do workspace → pegas o <code>graphId</code>.</li>
+        <li><code>POST /nodes</code> com esse <code>graphId</code> → conhecimento. <strong>Ainda zero layouts.</strong> O <code>NodeService.create</code> não escreve <code>graph_view_layouts</code>.</li>
+        <li>Front abre o canvas da Default. <code>GET /views/:id</code> (quando existir) devolve viewport + lista de layouts (vazia). Junta com <code>GET /nodes</code>. Nodes sem layout aparecem num sítio provisório (centro do viewport).</li>
+        <li>Arrastas → <code>PUT /views/:id/layouts</code>. Aí nasce a primeira linha de layout. Só nesta view.</li>
+        <li>Segunda view (quando o POST existir) começa sem layouts. O mesmo node, outra geometria.</li>
+      </ol>
+    </li>
+    <li>
+      <strong>O que já vem “de graça” vs o que falta destes dois.</strong>
+      <table>
+        <thead>
+          <tr><th>Peça</th><th>Já tens</th><th>Falta</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Graph</td>
+            <td>Linha (workspace). GET/PATCH. Model.</td>
+            <td>Nada neste fluxo.</td>
+          </tr>
+          <tr>
+            <td>GraphView</td>
+            <td>Linha Default (workspace). Model. Prisma.</td>
+            <td>Service, DTOs, controller, regra do default, DELETE seguro.</td>
+          </tr>
+          <tr>
+            <td>Layout</td>
+            <td>Tabela, model, PK composta, CASCADE.</td>
+            <td>Método <code>upsertLayouts</code> + rota PUT. Zero linhas até o canvas escrever.</td>
+          </tr>
+        </tbody>
+      </table>
+      Ordem: View CRUD primeiro (senão o PUT não tem pai). Layout a seguir, no mesmo service. Não implementes os dois em paralelo como se fossem User e Node.
+    </li>
+    <li>
+      <strong>Armadilha de tipos que já viste.</strong>
+      O model <code>GraphView</code> tem <code>viewport: Viewport</code> e <code>filters: Record&lt;string, unknown&gt;</code>. O Prisma devolve <code>JsonValue</code> nos dois. É o mesmo fosso do <code>attributes</code> na <a href="./0002-from-types-to-the-node-error.html">lição 2</a>. Quando fores escrever o service, alinha o model a <code>Prisma.JsonValue</code> <em>ou</em> valida e estreita na borda — não copies <code>Record</code> outra vez.
+    </li>
+  </ol>
+
+  <h2>Pratica</h2>
+  <div class="quiz" data-quiz='[{"q":"Quem insere a primeira linha em graphs?","choices":["O nested write do POST /workspaces.","Um POST /graphs ainda por escrever."],"answer":0,"ok":"Certo. O workspace já abre o graph.","no":"POST /graphs não existe de propósito."},{"q":"O que é o contrato de graph_view_layouts?","choices":["CRUD com id próprio como User.","Upsert na PK composta da view."],"answer":1,"ok":"Certo. A chave é (viewId, nodeId).","no":"Layout não tem id; não é um User."},{"q":"GET /graphs/:id devolve x,y dos nodes?","choices":["Não; posição vive só no layout.","Sim; graph já junta as views."],"answer":0},"ok":"Certo. Graph é conhecimento, não geometria.","no":"x,y nunca estão no graph nem no node."}]'></div>
+
+  <footer>
+    <p>Fonte primária de domínio: <a href="../docs/data-model.md">Modelo de dados</a> (§ graphs, graph_views, graph_view_layouts). Nested write: <a href="https://www.prisma.io/docs/v6/orm/prisma-client/queries/relation-queries#nested-writes">Prisma nested writes</a>. Rotas: <a href="https://docs.nestjs.com/controllers">Nest controllers</a>.</p>
+    <p>Folha: <a href="../reference/graph-view-layout.html">contratos Graph / View / Layout</a>.</p>
+    <p>Ainda opaco algum passo? Pergunta no chat com o número do passo.</p>
+  </footer>
+</main>
+<script src="../assets/quiz.js"></script>
+</body>
+</html>

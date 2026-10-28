@@ -6,3 +6,5 @@
 - Do not skip the field-by-field walk. He asked for no jumped steps.
 - Domain `GLOSSARY.md` at repo root is for Nexus product language. Do not overwrite it with teaching terms.
 - Existing Nest/Prisma code in `api/nexus-api` is the practice surface.
+- He treated Graph, GraphView, GraphViewLayout as three missing User-like CRUDs. Lesson 3 starts from FK parent-child and nested write. After 0003, skip “are these three POSTs?”; next is implementing View CRUD, then layout upsert in the same service.
+- `GraphView.filters` is still `Record<string, unknown>` — he will hit the lição 2 JsonValue hole again unless the model is aligned first.

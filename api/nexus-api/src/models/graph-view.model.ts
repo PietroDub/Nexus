@@ -1,3 +1,5 @@
+import type { Prisma } from '../generated/prisma/client.js';
+
 export type Viewport = {
   x: number;
   y: number;
@@ -9,8 +11,8 @@ export class GraphView {
   graphId: string;
   name: string;
   isDefault: boolean;
-  viewport: Viewport;
-  filters: Record<string, unknown>;
+  viewport: Prisma.JsonValue;
+  filters: Prisma.JsonValue;
   createdBy: string;
   version: number;
   createdAt: Date;

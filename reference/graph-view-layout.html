@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Referência — Graph, View, Layout</title>
+  <link rel="stylesheet" href="../assets/lesson.css" />
+</head>
+<body>
+<main>
+  <header>
+    <p>Referência</p>
+    <h1>Graph, GraphView, GraphViewLayout</h1>
+  </header>
+
+  <p>O grafo é o conhecimento; a geometria vive na view. Fontes: <a href="../GLOSSARY.md">GLOSSARY</a>, <a href="../docs/data-model.md">data-model</a>, <a href="../docs/adr/0001-normalized-postgres-graph.md">ADR 0001</a>.</p>
+
+  <h2>Quem cria a primeira linha</h2>
+  <table>
+    <thead>
+      <tr><th>Tabela</th><th>Primeira linha</th><th>API própria</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>graphs</code></td>
+        <td><code>POST /workspaces</code> (nested write)</td>
+        <td>GET, PATCH name. Sem POST, sem DELETE.</td>
+      </tr>
+      <tr>
+        <td><code>graph_views</code></td>
+        <td>A mesma transação: view <code>Default</code>, <code>isDefault: true</code></td>
+        <td>Ainda falta: list/create/patch/delete</td>
+      </tr>
+      <tr>
+        <td><code>graph_view_layouts</code></td>
+        <td>Nenhuma. Só no drag da view corrente.</td>
+        <td>Ainda falta: <code>PUT /views/:id/layouts</code> (upsert)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Contratos HTTP</h2>
+  <table>
+    <thead>
+      <tr><th>Rota</th><th>Body / query</th><th>Estado</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>GET /graphs?workspaceId=</code></td>
+        <td>query opcional</td>
+        <td>feito</td>
+      </tr>
+      <tr>
+        <td><code>GET /graphs/:id</code></td>
+        <td>—</td>
+        <td>feito. Sem nodes, sem x,y.</td>
+      </tr>
+      <tr>
+        <td><code>PATCH /graphs/:id</code></td>
+        <td><code>{ name? }</code></td>
+        <td>feito</td>
+      </tr>
+      <tr>
+        <td><code>GET /views?graphId=</code></td>
+        <td>query</td>
+        <td>falta</td>
+      </tr>
+      <tr>
+        <td><code>GET /views/:id</code></td>
+        <td>—</td>
+        <td>falta. Metadados + layouts visíveis.</td>
+      </tr>
+      <tr>
+        <td><code>POST /views</code></td>
+        <td><code>{ graphId, name, createdBy }</code></td>
+        <td>falta. <code>isDefault: false</code>.</td>
+      </tr>
+      <tr>
+        <td><code>PATCH /views/:id</code></td>
+        <td><code>{ name?, viewport?, filters?, isDefault? }</code></td>
+        <td>falta. Default na mesma transação.</td>
+      </tr>
+      <tr>
+        <td><code>DELETE /views/:id</code></td>
+        <td>—</td>
+        <td>falta. Recusa última view.</td>
+      </tr>
+      <tr>
+        <td><code>PUT /views/:id/layouts</code></td>
+        <td><code>[{ nodeId, x, y }]</code></td>
+        <td>falta. Upsert PK <code>(viewId, nodeId)</code>.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>FKs</h2>
+  <pre>workspace 1 ──&lt; graph 1 ──&lt; graph_view 1 ──&lt; graph_view_layout
+                              node 1 ────────────^
+</pre>
+  <p>Layout aponta para <em>dois</em> pais: a view e o node. Invariante de aplicação: <code>node.graphId === view.graphId</code>.</p>
+
+  <h2>O que não fazer</h2>
+  <ul>
+    <li><code>POST /graphs</code> — o workspace já cria.</li>
+    <li><code>x,y</code> em <code>nodes</code> — ADR 0001.</li>
+    <li>CRUD de layout com <code>id</code> próprio.</li>
+    <li>Escrever layout no <code>NodeService.create</code>.</li>
+    <li>Incrementar <code>node.version</code> no drag.</li>
+  </ul>
+</main>
+</body>
+</html>
