@@ -2,6 +2,8 @@
 
 ## Knowledge
 
+- [TypeScript Handbook: Everyday Types](https://www.typescriptlang.org/docs/handbook/2/everyday-types.html)
+  Primitives, annotations, return types, `Promise<T>`, object types, unions. Use for: what `: Promise<Node[]>` even means.
 - [TypeScript Handbook: Type Compatibility](https://www.typescriptlang.org/docs/handbook/type-compatibility.html)
   Structural subtyping: `x` is compatible with `y` if `y` has at least the same members as `x`. Use for: why two types named `Node` are still different.
 - [TypeScript Handbook: `Record<Keys, Type>`](https://www.typescriptlang.org/docs/handbook/utility-types.html#recordkeys-type)

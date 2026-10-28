@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Referência — valor, tipo, anotação, Promise</title>
+  <link rel="stylesheet" href="../assets/lesson.css" />
+</head>
+<body>
+<main>
+  <header>
+    <p>Referência</p>
+    <h1>Valor, tipo, anotação, Promise</h1>
+  </header>
+
+  <table>
+    <thead><tr><th>Palavra</th><th>O que é</th></tr></thead>
+    <tbody>
+      <tr><td>Valor</td><td>Dado de verdade, em runtime: <code>"Pietro"</code>, <code>26</code>, um objeto na memória.</td></tr>
+      <tr><td>Tipo</td><td>O conjunto de valores permitidos. Só existe na compilação. <a href="https://www.typescriptlang.org/docs/handbook/2/everyday-types.html">Everyday Types</a>.</td></tr>
+      <tr><td>Anotação</td><td><code>: string</code> depois do nome. Contrato com o compilador, não muda o JavaScript gerado.</td></tr>
+      <tr><td>Anotação de retorno</td><td><code>(): number</code> depois dos parâmetros. O <code>return</code> tem de caber nesse tipo.</td></tr>
+      <tr><td><code>T[]</code></td><td>Array cujos itens são <code>T</code>.</td></tr>
+      <tr><td><code>Promise&lt;T&gt;</code></td><td>Valor ainda não pronto; quando chegar, será <code>T</code>.</td></tr>
+      <tr><td>União <code>A | B</code></td><td>Pode ser A <em>ou</em> B.</td></tr>
+    </tbody>
+  </table>
+
+  <p>Compatibilidade: ver <a href="./structural-assignability.html">compatibilidade estrutural</a>.</p>
+</main>
+</body>
+</html>

@@ -9,6 +9,8 @@ import { PrismaModule } from './prisma/prisma.module.js';
 import { NodeService } from './services/node.service.js';
 import { UserService } from './services/user.service.js';
 import { WorkspaceService } from './services/workspace.service.js';
+import { RelationController } from './controllers/relation.controller.js';
+import { RelationService } from './services/relation.service.js';
 
 @Module({
   imports: [
@@ -20,7 +22,8 @@ import { WorkspaceService } from './services/workspace.service.js';
     UserController,
     WorkspaceController,
     NodeController,
+    RelationController,
   ],
-  providers: [AppService, UserService, WorkspaceService, NodeService],
+  providers: [AppService, UserService, WorkspaceService, NodeService, RelationService],
 })
 export class AppModule {}

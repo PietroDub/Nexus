@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Do tipo ao erro do Node</title>
+  <link rel="stylesheet" href="../assets/lesson.css" />
+</head>
+<body>
+<main>
+  <header>
+    <p>Lição 2 · desde a base</p>
+    <h1>O que é um tipo, o que é um return, e por que o Node vermelhou</h1>
+  </header>
+
+  <p>A <a href="./0001-why-return-node-failed.html">lição 1</a> começou no meio. Esta começa no chão: valor, tipo, anotação, Promise — e só no fim o teu <code>findAll</code>.</p>
+
+  <ol class="steps">
+    <li>
+      <strong>Há duas épocas no teu código.</strong>
+      Quando escreves TypeScript, o compilador lê o ficheiro <em>antes</em> de a API correr. Quando a API já está no ar (<code>npm run start:dev</code>), o Node.js executa JavaScript. Tipos <strong>não existem</strong> nessa segunda época. Eles só guiam o compilador. Um erro vermelho no VS Code é da primeira época. O Postgres nem vê isso.
+    </li>
+    <li>
+      <strong>Valor é o que existe de verdade.</strong>
+      <code>"Pietro"</code> é um valor. <code>26</code> é um valor. O objeto que o Prisma monta na memória depois do <code>SELECT</code> é um valor. Podes imprimir um valor no console.
+    </li>
+    <li>
+      <strong>Tipo é o conjunto de valores permitidos.</strong>
+      O tipo <code>string</code> significa “qualquer texto”. O tipo <code>number</code> significa “qualquer número”. O tipo <code>boolean</code> é só <code>true</code> ou <code>false</code>.
+      <aside>Handbook: primitives <code>string</code>, <code>number</code>, <code>boolean</code>. <a href="https://www.typescriptlang.org/docs/handbook/2/everyday-types.html">Everyday Types</a>.</aside>
+    </li>
+    <li>
+      <strong>Uma anotação é um contrato escrito à mão.</strong>
+      <pre>let nome: string = "Pietro";</pre>
+      Os <code>: string</code> vêm <em>depois</em> do nome. Querem dizer: “deste sítio em diante, <code>nome</code> só pode receber texto.” Se escreveres <code>nome = 26</code>, o compilador recusa — não porque o JavaScript não consiga, mas porque tu prometeste string.
+      <aside>“Type annotations will always go after the thing being typed.” <a href="https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#type-annotations-on-variables">Annotations on variables</a>.</aside>
+    </li>
+    <li>
+      <strong>Funções têm dois contratos: entrada e saída.</strong>
+      <pre>function idade(n: number): number {
+  return n;
+}</pre>
+      <code>n: number</code> = o argumento tem de ser número. <code>(): number</code> = o que a função <code>return</code> tem de ser número. Se deres <code>return "vinte"</code>, o compilador recusa.
+      <aside>“Return type annotations appear after the parameter list.” <a href="https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#return-type-annotations">Return type annotations</a>.</aside>
+    </li>
+    <li>
+      <strong><code>Node[]</code> significa “lista de Node”.</strong>
+      O <code>[]</code> aplica-se ao tipo à esquerda. <code>string[]</code> = lista de textos. <code>Node[]</code> = lista de coisas que cabem no tipo chamado <code>Node</code>. Ainda não dissemos o que <code>Node</code> é — só que o array inteiro tem de ser homogéneo.
+    </li>
+    <li>
+      <strong><code>Promise&lt;T&gt;</code> significa “ainda não tenho T; vou ter T daqui a pouco”.</strong>
+      <code>findMany</code> fala com o Postgres. Isso demora. Por isso não devolve o array imediatamente: devolve uma Promise. A anotação oficial para isso é <code>Promise&lt;T&gt;</code>, onde <code>T</code> é o que aparece quando a Promise resolve.
+      <aside>“If you want to annotate the return type of a function which returns a promise, you should use the Promise type.” <a href="https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#functions-which-return-promises">Functions which return Promises</a>.</aside>
+      Então <code>Promise&lt;Node[]&gt;</code> lê-se, em voz alta: “prometo, no futuro, uma lista de Node.”
+    </li>
+    <li>
+      <strong>O teu método, traduzido para português.</strong>
+      <pre>findAll(): Promise&lt;Node[]&gt; {
+  return this.prisma.node.findMany();
+}</pre>
+      “Esta função, no futuro, entrega uma lista da <em>minha</em> classe Node. O valor que estou a devolver é o que o Prisma.findMany produzir.” O compilador compara as duas pontas desta frase.
+    </li>
+    <li>
+      <strong>De onde vem o tipo da tua classe Node.</strong>
+      O import:
+      <pre>import { Node } from "../models/node.model.js";</pre>
+      aponta para o ficheiro que tu escreveste. Lá existia (antes da correção):
+      <pre>export class Node {
+  id: string;
+  title: string;
+  attributes: Record&lt;string, unknown&gt;;
+  // ...outros campos
+}</pre>
+      Isto é um <em>tipo objeto</em>: uma lista de propriedades e os tipos de cada uma. <a href="https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#object-types">Object Types</a>.
+    </li>
+    <li>
+      <strong>De onde vem o tipo que o Prisma devolve.</strong>
+      <code>npx prisma generate</code> lê o <code>schema.prisma</code> e gera ficheiros em <code>src/generated/prisma</code>. O campo <code>attributes Json</code> vira, no cliente, o tipo <code>JsonValue</code>. Não é a tua classe. É outro mapa de propriedades, gerado automaticamente. Os dois se chamam “Node” na conversa. No compilador, são dois mapas.
+    </li>
+    <li>
+      <strong>TypeScript não casa tipos pelo nome. Casa pela forma.</strong>
+      Se o alvo pede <code>{ nome: string }</code>, qualquer valor com um <code>nome: string</code> serve — mesmo que a classe se chame Dog. Se falta um membro, ou um membro tem tipo mais largo do que o alvo aceita, recusa.
+      <aside>“x is compatible with y if y has at least the same members as x.” <a href="https://www.typescriptlang.org/docs/handbook/type-compatibility.html">Type Compatibility</a>.</aside>
+    </li>
+    <li>
+      <strong>Comparação membro a membro — User primeiro, porque funciona.</strong>
+      Alvo = tua classe <code>User</code>. Fonte = linha Prisma de <code>users</code>.
+      <code>id</code> string/string, <code>email</code> string/string, <code>displayName</code> string/string, datas Date/Date. Todos os membros do alvo existem na fonte com o mesmo tipo. O contrato fecha. Por isso <code>Promise&lt;User[]&gt;</code> aceita <code>findMany</code>.
+    </li>
+    <li>
+      <strong>A mesma comparação no Node — pára em attributes.</strong>
+      <code>id</code>, <code>title</code>, <code>content</code>: iguais. Depois:
+      <table>
+        <thead><tr><th></th><th>Alvo (tua classe, antes)</th><th>Fonte (Prisma)</th></tr></thead>
+        <tbody>
+          <tr><td><code>attributes</code></td><td><code>Record&lt;string, unknown&gt;</code></td><td><code>JsonValue</code></td></tr>
+        </tbody>
+      </table>
+    </li>
+    <li>
+      <strong>União: “isto ou aquilo”.</strong>
+      <code>string | number</code> aceita texto <em>ou</em> número. <a href="https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#union-types">Union Types</a>.
+      O Prisma declara:
+      <pre>JsonValue = string | number | boolean | null | JsonObject | JsonArray</pre>
+      Ou seja: <code>attributes</code> <em>pode</em> ser <code>null</code>, ou um array, ou um número. Isto espelha o que <code>JSON.parse</code> aceita. <a href="https://www.prisma.io/docs/orm/prisma-client/special-fields-and-types/working-with-json-fields">Prisma Json</a>.
+    </li>
+    <li>
+      <strong><code>Record&lt;string, unknown&gt;</code> é só objeto.</strong>
+      Significa: “um objeto cujas chaves são string e cujos valores são unknown.” <a href="https://www.typescriptlang.org/docs/handbook/utility-types.html#recordkeys-type">Record</a>.
+      <code>{ "level": 1 }</code> cabe. <code>null</code> não cabe. <code>[1, 2]</code> não cabe.
+      A fonte (JsonValue) <em>permite</em> <code>null</code>. O alvo (Record) <em>proíbe</em> <code>null</code>. A fonte é mais larga que o alvo. Atribuição ilegal.
+    </li>
+    <li>
+      <strong>Uma analogia física.</strong>
+      O alvo é a boca de um funil: só passa objeto. A fonte é um balde onde também pode vir líquido (<code>null</code>) ou uma lista. O compilador recusa despejar o balde no funil — mesmo que tu, na prática, só coloques objetos no balde. Ele olha para o <em>tipo</em> do balde, não para o que tu costumas pôr lá.
+    </li>
+    <li>
+      <strong>Por que o erro menciona <code>then</code>.</strong>
+      <code>Promise&lt;A[]&gt;</code> só é atribuível a <code>Promise&lt;B[]&gt;</code> se <code>A[]</code> for atribuível a <code>B[]</code>. O compilador entra no Promise, encontra o método <code>then</code>, e compara o <code>value</code> do callback. Lá está o array. Lá o passo 15 falha. A mensagem enorme é o envelope (Promise) a mostrar o conteúdo (attributes).
+    </li>
+    <li>
+      <strong>O que a correção fez — e o que não fez.</strong>
+      Mudámos o alvo:
+      <pre>attributes: Prisma.JsonValue;</pre>
+      O funil passou a ter a mesma boca do balde. Campo a campo, a comparação fecha. <code>findMany</code> não mudou. O Postgres não mudou. Só o contrato da tua classe.
+      Não usámos <code>as Node[]</code>: isso seria rasgar o contrato em vez de o alinhar.
+    </li>
+  </ol>
+
+  <h2>Pratica</h2>
+  <div class="quiz" data-quiz='[{"q":"Quando o TypeScript verifica a anotação Promise<Node[]>?","choices":["Só ao compilar, os tipos já não existem no runtime.","Sempre que o Postgres devolve uma linha nesta tabela."],"answer":0,"ok":"Certo. O vermelho é da compilação, não do banco.","no":"O Postgres não vê tipos; o erro é anterior à query."},{"q":"O que Promise<Node[]> promete, em voz alta?","choices":["Agora mesmo uma lista da classe Node do model.","No futuro, uma lista que caiba no tipo Node."],"answer":1,"ok":"Certo. Promise adianta o T; T aqui é Node[].","no":"findMany não entrega o array no mesmo instante."},{"q":"Por que JsonValue não cabe em Record<string, unknown>?","choices":["O JsonValue também admite null, array e número.","Record admite null e JsonValue recusa esse null."],"answer":0,"ok":"Certo. A fonte é mais larga que o funil do alvo.","no":"Record é só objeto; JsonValue é união, inclui null."}]'></div>
+
+  <footer>
+    <p>Fonte primária: <a href="https://www.typescriptlang.org/docs/handbook/2/everyday-types.html">Everyday Types</a> (anotação, return, Promise). Depois: <a href="https://www.typescriptlang.org/docs/handbook/type-compatibility.html">Type Compatibility</a>.</p>
+    <p>Folhas: <a href="../reference/from-value-to-annotation.html">valor e anotação</a> · <a href="../reference/structural-assignability.html">estrutura</a>.</p>
+    <p>Ainda opaco algum passo? Pergunta no chat com o número do passo.</p>
+  </footer>
+</main>
+<script src="../assets/quiz.js"></script>
+</body>
+</html>

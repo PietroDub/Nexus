@@ -1,3 +1,5 @@
+import type { Prisma } from '../generated/prisma/client.js';
+
 export class Relation {
   id: string;
   graphId: string;
@@ -5,7 +7,7 @@ export class Relation {
   sourceNodeId: string;
   targetNodeId: string;
   directed: boolean;
-  properties: Record<string, unknown>;
+  properties: Prisma.JsonValue;
   createdBy: string;
   version: number;
   createdAt: Date;
