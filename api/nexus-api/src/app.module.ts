@@ -15,6 +15,8 @@ import { NodeService } from './services/node.service.js';
 import { RelationService } from './services/relation.service.js';
 import { UserService } from './services/user.service.js';
 import { WorkspaceService } from './services/workspace.service.js';
+import { GraphViewLayoutService } from './services/graph-view-layout.service.js';
+import { GraphViewLayoutController } from './controllers/graph-view-layout.controller.js';
 
 @Module({
   imports: [
@@ -29,6 +31,7 @@ import { WorkspaceService } from './services/workspace.service.js';
     RelationController,
     GraphController,
     GraphViewController,
+    GraphViewLayoutController,
   ],
   providers: [
     AppService,
@@ -38,6 +41,7 @@ import { WorkspaceService } from './services/workspace.service.js';
     RelationService,
     GraphService,
     GraphViewService,
+    GraphViewLayoutService,
   ],
 })
 export class AppModule {}
