@@ -8,16 +8,24 @@ import { PrismaService } from '../prisma/prisma.service.js';
 export class RelationService {
   constructor(private readonly prisma: PrismaService) {}
 
-  findAll(): Promise<Relation[]> {
+  findAll(graphId?: string): Promise<Relation[]> {
     return this.prisma.relation.findMany({
-      where: { archivedAt: null },
+      where: {
+        archivedAt: null,
+        ...(graphId ? { graphId } : {}),
+        graph: { workspace: { archivedAt: null } },
+      },
       orderBy: { createdAt: 'asc' },
     });
   }
 
   findOne(id: string): Promise<Relation | null> {
     return this.prisma.relation.findFirst({
-      where: { id, archivedAt: null },
+      where: {
+        id,
+        archivedAt: null,
+        graph: { workspace: { archivedAt: null } },
+      },
     });
   }
 
@@ -89,8 +97,8 @@ export class RelationService {
     sourceNodeId: string;
     targetNodeId: string;
   }): Promise<void> {
-    const graph = await this.prisma.graph.findUnique({
-      where: { id: input.graphId },
+    const graph = await this.prisma.graph.findFirst({
+      where: { id: input.graphId, workspace: { archivedAt: null } },
     });
     if (!graph) {
       throw new BadRequestException('Graph does not exist');

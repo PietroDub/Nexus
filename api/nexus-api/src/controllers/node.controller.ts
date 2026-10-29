@@ -9,6 +9,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { CreateNodeDto } from '../dto/node/create-node.dto.js';
 import { UpdateNodeDto } from '../dto/node/update-node.dto.js';
@@ -20,8 +21,8 @@ export class NodeController {
   constructor(private readonly nodeService: NodeService) {}
 
   @Get()
-  findAll(): Promise<Node[]> {
-    return this.nodeService.findAll();
+  findAll(@Query('graphId') graphId?: string): Promise<Node[]> {
+    return this.nodeService.findAll(graphId);
   }
 
   @Get(':id')

@@ -1,5 +1,4 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { Prisma } from '../generated/prisma/client.js';
 import { CreateNodeDto } from '../dto/node/create-node.dto.js';
 import { UpdateNodeDto } from '../dto/node/update-node.dto.js';
 import { Node } from '../models/node.model.js';
@@ -9,16 +8,24 @@ import { PrismaService } from '../prisma/prisma.service.js';
 export class NodeService {
   constructor(private readonly prisma: PrismaService) {}
 
-  findAll(): Promise<Node[]> {
+  findAll(graphId?: string): Promise<Node[]> {
     return this.prisma.node.findMany({
-      where: { archivedAt: null },
+      where: {
+        archivedAt: null,
+        ...(graphId ? { graphId } : {}),
+        graph: { workspace: { archivedAt: null } },
+      },
       orderBy: { createdAt: 'asc' },
     });
   }
 
   findOne(id: string): Promise<Node | null> {
     return this.prisma.node.findFirst({
-      where: { id, archivedAt: null },
+      where: {
+        id,
+        archivedAt: null,
+        graph: { workspace: { archivedAt: null } },
+      },
     });
   }
 
@@ -54,6 +61,7 @@ export class NodeService {
         content: dto.content,
         typeId: dto.typeId,
         attributes: dto.attributes,
+        version: { increment: 1 },
       },
     });
   }
@@ -64,16 +72,26 @@ export class NodeService {
       return false;
     }
 
-    await this.prisma.node.update({
-      where: { id },
-      data: { archivedAt: new Date() },
-    });
+    const now = new Date();
+    await this.prisma.$transaction([
+      this.prisma.node.update({
+        where: { id },
+        data: { archivedAt: now },
+      }),
+      this.prisma.relation.updateMany({
+        where: {
+          archivedAt: null,
+          OR: [{ sourceNodeId: id }, { targetNodeId: id }],
+        },
+        data: { archivedAt: now },
+      }),
+    ]);
     return true;
   }
 
   private async assertGraphAndType(graphId: string, typeId: string) {
-    const graph = await this.prisma.graph.findUnique({
-      where: { id: graphId },
+    const graph = await this.prisma.graph.findFirst({
+      where: { id: graphId, workspace: { archivedAt: null } },
     });
     if (!graph) {
       throw new BadRequestException('Graph does not exist');
