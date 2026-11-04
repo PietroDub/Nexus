@@ -36,6 +36,12 @@ export class RelationService {
       sourceNodeId: dto.sourceNodeId,
       targetNodeId: dto.targetNodeId,
     });
+    await this.assertAcyclicIfNeeded({
+      graphId: dto.graphId,
+      typeId: dto.typeId,
+      sourceNodeId: dto.sourceNodeId,
+      targetNodeId: dto.targetNodeId,
+    });
 
     return this.prisma.relation.create({
       data: {
@@ -57,11 +63,22 @@ export class RelationService {
     }
 
     if (dto.typeId || dto.sourceNodeId || dto.targetNodeId) {
+      const typeId = dto.typeId ?? existing.typeId;
+      const sourceNodeId = dto.sourceNodeId ?? existing.sourceNodeId;
+      const targetNodeId = dto.targetNodeId ?? existing.targetNodeId;
+
       await this.assertPlacement({
         graphId: existing.graphId,
-        typeId: dto.typeId ?? existing.typeId,
-        sourceNodeId: dto.sourceNodeId ?? existing.sourceNodeId,
-        targetNodeId: dto.targetNodeId ?? existing.targetNodeId,
+        typeId,
+        sourceNodeId,
+        targetNodeId,
+      });
+      await this.assertAcyclicIfNeeded({
+        graphId: existing.graphId,
+        typeId,
+        sourceNodeId,
+        targetNodeId,
+        excludeRelationId: id,
       });
     }
 
@@ -129,7 +146,9 @@ export class RelationService {
       throw new BadRequestException('Source node does not exist');
     }
     if (source.graphId !== input.graphId) {
-      throw new BadRequestException('Source node does not belong to this graph');
+      throw new BadRequestException(
+        'Source node does not belong to this graph',
+      );
     }
 
     const target = byId.get(input.targetNodeId);
@@ -137,7 +156,81 @@ export class RelationService {
       throw new BadRequestException('Target node does not exist');
     }
     if (target.graphId !== input.graphId) {
-      throw new BadRequestException('Target node does not belong to this graph');
+      throw new BadRequestException(
+        'Target node does not belong to this graph',
+      );
     }
   }
+
+  /**
+   * Se o tipo for DAG (acyclic), recusa a aresta nova quando ela fecharia um ciclo.
+   * Pergunta: já existe caminho target → … → source só com arestas deste tipo?
+   * Se sim, gravar source → target formaria um anel.
+   */
+  private async assertAcyclicIfNeeded(input: {
+    graphId: string;
+    typeId: string;
+    sourceNodeId: string;
+    targetNodeId: string;
+    /** No update: a aresta antiga não conta (estamos a movê-la). */
+    excludeRelationId?: string;
+  }): Promise<void> {
+    const type = await this.prisma.relationType.findUnique({
+      where: { id: input.typeId },
+    });
+    // uses, allied_with, etc.: ciclos são conteúdo normal — não valida.
+    if (!type?.acyclic) {
+      return;
+    }
+
+    // A → A é ciclo de comprimento 1.
+    if (input.sourceNodeId === input.targetNodeId) {
+      throw new BadRequestException('Acyclic type cannot self-loop');
+    }
+
+    // Subgrafo: só relations visíveis deste graph + deste type.
+    const edges = await this.prisma.relation.findMany({
+      where: {
+        graphId: input.graphId,
+        typeId: input.typeId,
+        archivedAt: null,
+        ...(input.excludeRelationId
+          ? { id: { not: input.excludeRelationId } }
+          : {}),
+      },
+      select: { sourceNodeId: true, targetNodeId: true },
+    });
+
+    // Lista de adjacência: de cada node, para onde as setas apontam.
+    // Ex.: A→B, B→C  ⇒  { A: [B], B: [C] }
+    const outgoing = new Map<string, string[]>();
+    for (const edge of edges) {
+      const next = outgoing.get(edge.sourceNodeId) ?? [];
+      next.push(edge.targetNodeId);
+      outgoing.set(edge.sourceNodeId, next);
+    }
+
+    // BFS a partir do TARGET da aresta que queres criar.
+    const queue = [input.targetNodeId];
+    const visited = new Set([input.targetNodeId]);
+
+    while (queue.length > 0) {
+      const current = queue.shift()!; // próximo node a expandir
+      for (const next of outgoing.get(current) ?? []) {
+        // Chegámos ao SOURCE → path target→…→source já existe → ciclo.
+        if (next === input.sourceNodeId) {
+          throw new BadRequestException(
+            'This relation would create a cycle',
+          );
+        }
+        if (!visited.has(next)) {
+          visited.add(next);
+          queue.push(next);
+        }
+      }
+    }
+    // Saiu do while sem throw: não há caminho de volta — a aresta é segura.
+  }
 }
+
+
