@@ -3,6 +3,7 @@ import { CreateRelationDto } from '../dto/relation/create-relation.dto.js';
 import { UpdateRelationDto } from '../dto/relation/update-relation.dto.js';
 import { Relation } from '../models/relation.model.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { randomUUID } from 'node:crypto';
 
 @Injectable()
 export class RelationService {
@@ -30,7 +31,7 @@ export class RelationService {
   }
 
   async create(dto: CreateRelationDto): Promise<Relation> {
-    await this.assertPlacement({
+    const placement = await this.assertPlacement({
       graphId: dto.graphId,
       typeId: dto.typeId,
       sourceNodeId: dto.sourceNodeId,
@@ -43,16 +44,42 @@ export class RelationService {
       targetNodeId: dto.targetNodeId,
     });
 
-    return this.prisma.relation.create({
-      data: {
-        graphId: dto.graphId,
-        typeId: dto.typeId,
-        sourceNodeId: dto.sourceNodeId,
-        targetNodeId: dto.targetNodeId,
-        directed: dto.directed,
-        properties: dto.properties ?? {},
-        createdBy: dto.createdBy,
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const relation = await tx.relation.create({
+        data: {
+          graphId: dto.graphId,
+          typeId: dto.typeId,
+          sourceNodeId: dto.sourceNodeId,
+          targetNodeId: dto.targetNodeId,
+          directed: dto.directed,
+          properties: dto.properties ?? {},
+          createdBy: dto.createdBy,
+        },
+      });
+      const graph = await tx.graph.findUnique({
+        where: { id: dto.graphId },
+      });
+
+      await tx.auditEvent.create({
+        data: {
+          workspaceId: graph?.workspaceId ?? '',
+          actorId: dto.createdBy,
+          entityType: 'relation',
+          entityId: relation.id,
+          action: 'RelationCreated',
+          payload: {
+            graphId: dto.graphId,
+            typeId: dto.typeId,
+            sourceNodeId: dto.sourceNodeId,
+            targetNodeId: dto.targetNodeId,
+            directed: dto.directed,
+            properties: dto.properties ?? {},
+          },
+          requestId: randomUUID(),
+        },
+      });
+
+      return relation;
     });
   }
 
@@ -82,16 +109,43 @@ export class RelationService {
       });
     }
 
-    return this.prisma.relation.update({
-      where: { id },
-      data: {
-        typeId: dto.typeId,
-        sourceNodeId: dto.sourceNodeId,
-        targetNodeId: dto.targetNodeId,
-        directed: dto.directed,
-        properties: dto.properties,
-        version: { increment: 1 },
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const relation = await tx.relation.update({
+        where: { id },
+        data: {
+          typeId: dto.typeId,
+          sourceNodeId: dto.sourceNodeId,
+          targetNodeId: dto.targetNodeId,
+          directed: dto.directed,
+          properties: dto.properties,
+          version: { increment: 1 },
+        },
+      });
+      const graph = await tx.graph.findUnique({
+        where: { id: existing.graphId },
+      });
+      if (!graph) {
+        throw new BadRequestException('Graph does not exist');
+      }
+
+      await tx.auditEvent.create({
+        data: {
+          workspaceId: graph.workspaceId,
+          actorId: existing.createdBy,
+          entityType: 'relation',
+          entityId: relation.id,
+          action: 'RelationUpdated',
+          payload: {
+            typeId: dto.typeId,
+            sourceNodeId: dto.sourceNodeId,
+            targetNodeId: dto.targetNodeId,
+            directed: dto.directed,
+            properties: dto.properties ?? {},
+          },
+          requestId: randomUUID(),
+        },
+      });
+      return relation;
     });
   }
 
@@ -101,9 +155,36 @@ export class RelationService {
       return false;
     }
 
-    await this.prisma.relation.update({
-      where: { id },
-      data: { archivedAt: new Date() },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.relation.update({
+        where: { id },
+        data: { archivedAt: new Date() },
+      });
+      const graph = await tx.graph.findUnique({
+        where: { id: existing.graphId },
+      });
+      if (!graph) {
+        throw new BadRequestException('Graph does not exist');
+      }
+      await tx.auditEvent.create({
+        data: {
+          workspaceId: graph.workspaceId,
+          actorId: existing.createdBy,
+          entityType: 'relation',
+          entityId: id,
+          action: 'RelationArchived',
+          payload: {
+            graphId: existing.graphId,
+            typeId: existing.typeId,
+            sourceNodeId: existing.sourceNodeId,
+            targetNodeId: existing.targetNodeId,
+            directed: existing.directed,
+            properties: existing.properties ?? {},
+          },
+          requestId: randomUUID(),
+        },
+      });
+      return true;
     });
     return true;
   }
@@ -219,9 +300,7 @@ export class RelationService {
       for (const next of outgoing.get(current) ?? []) {
         // Chegámos ao SOURCE → path target→…→source já existe → ciclo.
         if (next === input.sourceNodeId) {
-          throw new BadRequestException(
-            'This relation would create a cycle',
-          );
+          throw new BadRequestException('This relation would create a cycle');
         }
         if (!visited.has(next)) {
           visited.add(next);
@@ -232,5 +311,3 @@ export class RelationService {
     // Saiu do while sem throw: não há caminho de volta — a aresta é segura.
   }
 }
-
-
